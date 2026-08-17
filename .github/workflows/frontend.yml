@@ -1,37 +1,62 @@
 name: Frontend Jobs
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
 
-on: [push, pull_request]
 jobs:
   build:
-    name: Frontend Build
+    name: Frontend Build & Deploy
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: [24]
     defaults:
       run:
         working-directory: frontendv2
     steps:
       - name: Code Checkout
         uses: actions/checkout@v4
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v2
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 24
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 11
+
       - name: Install dependencies
-        run: |
-          if [ -f pnpm-lock.yaml ]; then
-            pnpm install --frozen-lockfile
-          else
-            echo "pnpm-lock.yaml file not found"
-            exit 1
-          fi
-      - name: Build
-        run: pnpm build
+        run: pnpm install --network-concurrency 1
+
+      - name: Disable Next.js telemetry
+        run: npx next telemetry disable
+
+      - name: Build frontend
+        env:
+          NODE_OPTIONS: "--max-old-space-size=16384"
+          NEXT_TELEMETRY_DISABLED: "1"
+        run: ./node_modules/.bin/next build --webpack
+
+      - name: Deploy build to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "frontendv2/.next"
+          target: "/var/www/featherpanel/"
+          strip_components: 1
+
+      - name: Restart frontend service
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "Build deployed successfully"
+            ls /var/www/featherpanel/frontendv2/.next
