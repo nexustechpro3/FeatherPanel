@@ -46,9 +46,9 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "frontendv2/.next"
-          target: "/var/www/featherpanel/"
-          strip_components: 1
+          source: "frontendv2/.next/*"
+          target: "/var/www/featherpanel/frontendv2/.next"
+          strip_components: 2
 
       - name: Restart frontend service
         uses: appleboy/ssh-action@v1
